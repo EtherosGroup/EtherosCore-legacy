@@ -1,0 +1,5 @@
+name: EtherosCore-legacy
+version: '${version}'
+main: com.skilfully.ethero.EtherosCore
+authors: [ Etheros Group ]
+website: etheros.skilfully.cn
