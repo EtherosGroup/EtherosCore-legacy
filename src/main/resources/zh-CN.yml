@@ -1,0 +1,4 @@
+prefix: "[EtherosCore] "
+
+plugin_language_loaded: "zh-CN.yml 已作为插件语言加载！"
+language_loaded: "zh-CN.yml已加载！"

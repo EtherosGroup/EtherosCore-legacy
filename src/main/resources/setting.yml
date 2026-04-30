@@ -1,16 +1,3 @@
-# EtherosCore
-
-EtherosCore是由Etheros Group开发的一款适用于Minecraft服务器的管理插件，用于管理其他E家插件以及为其提供依赖
-
-### 命令
-***etheroscore可以简写为ec***
-
-- /etheroscore info 查看插件信息 
-
-### 配置文件
-
-- **setting.yml**
-```yaml
 # 本地服务器配置
 server:
 
@@ -60,20 +47,3 @@ group:
     proxy-config-use:
         server-languages: true
         plugin-update-repositories: true
-```
-
-- **zh-CN.yml**
-```yaml
-prefix: "[EtherosCore] "
-
-plugin_language_loaded: "zh-CN.yml 已作为插件语言加载！"
-language_loaded: "zh-CN.yml已加载！"
-```
-
-- **en-US.yml**
-```yaml
-prefix: "[EtherosCore] "
-
-plugin_language_loaded: "en-US.yml has been loaded as a plugin language!"
-language_loaded: "en-US.yml Loaded!"
-```
