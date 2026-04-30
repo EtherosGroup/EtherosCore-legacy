@@ -28,28 +28,28 @@ server:
     # 插件更新
     plugin-update:
         # 是否启用插件更新功能
-        enable: true
+        enabled: true
         # 插件更新时，若未指定更新地址，则从下方的仓库中获取
         repositories:
             - 'https://repositories.etheros.skilfully.cn/'
         # 自动更新
         auto-update:
             # 是否启用自动更新
-            enable: false
+            enabled: false
             # 调度方式，可选：new-version，date-<月>-<日>
             # new-version：每天、每次启动服务器时检测，当插件有新版本时进行更新。
             # date-<月>-<日>：指定日期更新。
             type: 'new-version'
             # 不进行更新的列表。
             # | Do-Not-Update List.
-            no-update:
+            no-updates:
                 - 'example'
 
 # 群组设置
 group:
 
     # 是否加入群组
-    enable: false
+    enabled: false
 
     # 上游代理服务器配置
     proxy-server:
