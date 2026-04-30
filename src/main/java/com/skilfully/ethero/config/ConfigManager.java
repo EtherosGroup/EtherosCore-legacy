@@ -1,8 +1,10 @@
-package com.skilfully.ethero.service;
+package com.skilfully.ethero.config;
 
 import com.skilfully.ethero.EtherosCore;
+import com.skilfully.ethero.config.entity.PluginConfig;
 import com.skilfully.ethero.data.GlobalData;
 import com.skilfully.ethero.exceptions.NoLanguageException;
+import com.skilfully.ethero.service.ECMessenger;
 import com.skilfully.ethero.utils.config.YamlConfig;
 import com.skilfully.ethero.utils.messenger.Messenger;
 
@@ -80,9 +82,45 @@ public class ConfigManager {
             plugin_language_config = new YamlConfig(languageFile);
         }
         messenger.consoleInfo(plugin_language_config.getString("plugin_language_loaded", null));
-
         ECMessenger.getMessenger().setPrefix(plugin_language_config.getString("prefix", null));
-
-
     }
+
+    public static PluginConfig getPluginConfig() {
+        PluginConfig pluginConfig = new PluginConfig();
+        // server
+        PluginConfig.Server server = new PluginConfig.Server();
+        server.setId(config.getString("server.id", null));
+        server.setName(config.getString("server.name", null));
+        server.setLanguages(config.getStringList("server.languages"));
+
+        PluginConfig.Server.PluginUpdate pluginUpdate = new PluginConfig.Server.PluginUpdate();
+        pluginUpdate.setEnabled(config.getBoolean("server.plugin-update.enabled", true));
+        pluginUpdate.setRepositories(config.getStringList("server.plugin-update.repositories"));
+
+        PluginConfig.Server.PluginUpdate.AutoUpdate autoUpdate = new PluginConfig.Server.PluginUpdate.AutoUpdate();
+        autoUpdate.setEnabled(config.getBoolean("server.plugin-update.auto-update.enabled", false));
+        autoUpdate.setType(config.getString("server.plugin-update.auto-update.type", "new-version"));
+        autoUpdate.setNoUpdates(config.getStringList("server.plugin-update.auto-update.no-updates"));
+        pluginUpdate.setAutoUpdate(autoUpdate);
+
+        server.setPluginUpdate(pluginUpdate);
+        pluginConfig.setServer(server);
+
+        PluginConfig.Group group = new PluginConfig.Group();
+        group.setEnabled(config.getBoolean("group.enabled", false));
+
+        PluginConfig.Group.ProxyServer proxyServer = new PluginConfig.Group.ProxyServer();
+        proxyServer.setAddress(config.getString("group.proxy-server.address", null));
+        group.setProxyServer(proxyServer);
+
+        PluginConfig.Group.ProxyConfigUse proxyConfigUse = new PluginConfig.Group.ProxyConfigUse();
+        proxyConfigUse.setServerLanguages(config.getBoolean("group.proxy-server.server-languages", true));
+        proxyConfigUse.setPluginUpdateRepositories(config.getBoolean("group.proxy-server.plugin-update-repositories", true));
+        group.setProxyConfigUse(proxyConfigUse);
+
+        pluginConfig.setGroup(group);
+
+        return pluginConfig;
+    }
+
 }
