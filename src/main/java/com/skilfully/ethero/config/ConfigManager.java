@@ -16,11 +16,11 @@ import java.util.Map;
 
 public class ConfigManager {
 
-    public static YamlConfig config;
-    public static YamlConfig plugin_language_config;
     public static Map<String, YamlConfig> languages_config = new HashMap<>();
 
     private static final Messenger messenger = ECMessenger.getMessenger();
+
+    public static PluginConfig plugin_config;
 
     public static void loadConfig() throws IOException, NoLanguageException {
         File workDirectory = YamlConfig.createWorkDirectory(GlobalData.pluginName);
@@ -38,9 +38,11 @@ public class ConfigManager {
             throw new RuntimeException("加载配置文件失败:1");
         }
 
-        config = new YamlConfig(file);
+        YamlConfig config = new YamlConfig(file);
+        plugin_config = getPluginConfig(config);
 
-        List<String> languages = config.getStringList("server.languages");
+        List<String> languages = plugin_config.getServer().getLanguages();
+        YamlConfig plugin_language_config;
         if (!languages.isEmpty()) {
             for (String language : languages) {
                 File languageFile = YamlConfig.extractFileFromJarResources(
@@ -85,7 +87,7 @@ public class ConfigManager {
         ECMessenger.getMessenger().setPrefix(plugin_language_config.getString("prefix", null));
     }
 
-    public static PluginConfig getPluginConfig() {
+    public static PluginConfig getPluginConfig(YamlConfig config) {
         PluginConfig pluginConfig = new PluginConfig();
         // server
         PluginConfig.Server server = new PluginConfig.Server();
