@@ -13,8 +13,10 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -40,31 +42,24 @@ import java.util.jar.JarFile;
 public class ApplicationContext {
 
     /**
-     * 一键启动容器: 扫描primarySource所在包 → 注册主类 → refresh
+     * 一键启动容器: 扫描primarySource所在包 → refresh
      * <p>
-     * primarySource 需要标注 @Service 以便享受依赖注入。
+     * primarySource 若标注了 @Service 则同时注册为Bean，否则仅作扫描锚点。
      * <pre>{@code
-     * &#064;Service
-     * public class Initializer {
-     *     &#064;Autowired
-     *     private ConfigManager configManager;
-     *
-     *     &#064;PostConstruct
-     *     public void init() { ... }
-     * }
-     *
      * // 在插件入口:
-     * ApplicationContext context = ApplicationContext.run(Initializer.class);
+     * ApplicationContext.run(EtherosCore.class);
      * }</pre>
      *
-     * @param primarySource 入口类 (需标注 @Service)
+     * @param primarySource 入口类（作为包扫描锚点）
      * @return 已refresh的容器
      */
     public static ApplicationContext run(Class<?> primarySource) {
         ApplicationContext context = new ApplicationContext();
         String packageName = primarySource.getPackage().getName();
         context.scan(packageName);
-        context.register(primarySource);
+        if (primarySource.isAnnotationPresent(Service.class)) {
+            context.register(primarySource);
+        }
         context.refresh();
         return context;
     }
@@ -242,7 +237,7 @@ public class ApplicationContext {
     }
 
     private void invokePostConstruct() {
-        for (Object bean : beansByType.values()) {
+        for (Object bean : sortByDependency()) {
             Class<?> clazz = bean.getClass();
             while (clazz != Object.class) {
                 for (Method method : clazz.getDeclaredMethods()) {
@@ -269,7 +264,74 @@ public class ApplicationContext {
         }
     }
 
-    // ========== 扫描工具方法 ==========
+    /**
+     * 按依赖关系拓扑排序，无依赖的Bean先执行@PostConstruct
+     */
+    private List<Object> sortByDependency() {
+        Map<Class<?>, Object> classToBean = new LinkedHashMap<>(beansByType);
+        Map<Object, Integer> inDegree = new LinkedHashMap<>();
+        Map<Object, List<Object>> dependents = new LinkedHashMap<>();
+
+        for (Object bean : beansByType.values()) {
+            inDegree.put(bean, 0);
+            dependents.put(bean, new ArrayList<>());
+        }
+
+        for (Map.Entry<Class<?>, Object> entry : beansByType.entrySet()) {
+            Object bean = entry.getValue();
+            Class<?> beanClass = entry.getKey();
+            Class<?> current = beanClass;
+            while (current != Object.class) {
+                for (Field field : current.getDeclaredFields()) {
+                    if (field.isAnnotationPresent(Autowired.class)) {
+                        Class<?> fieldType = field.getType();
+                        Object dep = classToBean.get(fieldType);
+                        if (dep == null) {
+                            for (Map.Entry<Class<?>, Object> e : classToBean.entrySet()) {
+                                if (fieldType.isAssignableFrom(e.getKey()) && !e.getKey().equals(beanClass)) {
+                                    dep = e.getValue();
+                                    break;
+                                }
+                            }
+                        }
+                        if (dep != null && dep != bean) {
+                            inDegree.put(bean, inDegree.get(bean) + 1);
+                            dependents.get(dep).add(bean);
+                        }
+                    }
+                }
+                current = current.getSuperclass();
+            }
+        }
+
+        List<Object> sorted = new ArrayList<>();
+        Queue<Object> queue = new LinkedList<>();
+        for (Map.Entry<Object, Integer> entry : inDegree.entrySet()) {
+            if (entry.getValue() == 0) {
+                queue.add(entry.getKey());
+            }
+        }
+
+        while (!queue.isEmpty()) {
+            Object bean = queue.poll();
+            sorted.add(bean);
+            for (Object dependent : dependents.get(bean)) {
+                int degree = inDegree.get(dependent) - 1;
+                inDegree.put(dependent, degree);
+                if (degree == 0) {
+                    queue.add(dependent);
+                }
+            }
+        }
+
+        if (sorted.size() != beansByType.size()) {
+            throw new DIException("检测到循环依赖，@PostConstruct 无法排序");
+        }
+
+        return sorted;
+    }
+
+    // 扫描工具方法
 
     private void scanJar(URL resource, String basePackage, String path) throws Exception {
         String urlPath = resource.getPath();
