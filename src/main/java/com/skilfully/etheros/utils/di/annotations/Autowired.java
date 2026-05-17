@@ -12,7 +12,7 @@ import java.lang.annotation.Target;
  * @since 1.0.0
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.FIELD)
+@Target({ElementType.FIELD, ElementType.CONSTRUCTOR})
 public @interface Autowired {
     /**
      * 是否必须注入，默认true。若为false且未找到Bean则跳过不抛异常
