@@ -6,11 +6,16 @@ import com.skilfully.etheros.utils.di.annotations.Service;
 import com.skilfully.etheros.utils.di.exception.DIException;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
@@ -19,6 +24,11 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+
+import org.objectweb.asm.AnnotationVisitor;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.Opcodes;
 
 /**
  * DI容器核心类，负责Bean的扫描、注册、实例化、注入与生命周期管理
@@ -37,7 +47,7 @@ import java.util.jar.JarFile;
  *
  * @author Etheros Group
  * @since 1.0.0
- * @version 1.0.0
+ * @version 1.0.1
  */
 public class ApplicationContext {
 
@@ -160,19 +170,149 @@ public class ApplicationContext {
     // 内部
 
     private void instantiateBeans() {
-        for (Class<?> clazz : serviceClasses) {
-            try {
-                Object instance = clazz.newInstance();
-                Service service = clazz.getAnnotation(Service.class);
-                String name = service.value().isEmpty()
-                        ? decapitalize(clazz.getSimpleName())
-                        : service.value();
-                beansByName.put(name, instance);
-                beansByType.put(clazz, instance);
-            } catch (InstantiationException | IllegalAccessException e) {
-                throw new DIException("无法实例化 " + clazz.getName() + ": 缺少可访问的无参构造器", e);
+        List<Class<?>> sorted = topologicalSortClasses();
+        for (Class<?> clazz : sorted) {
+            Constructor<?> ctor = findInjectableConstructor(clazz);
+            if (ctor != null && ctor.getParameterCount() > 0) {
+                Object[] args = resolveConstructorArgs(ctor, clazz);
+                try {
+                    ctor.setAccessible(true);
+                    Object instance = ctor.newInstance(args);
+                    registerBean(clazz, instance);
+                } catch (Exception e) {
+                    throw new DIException("构造器注入失败: " + clazz.getName(), e);
+                }
+            } else {
+                try {
+                    Object instance = clazz.newInstance();
+                    registerBean(clazz, instance);
+                } catch (InstantiationException | IllegalAccessException e) {
+                    throw new DIException("无法实例化 " + clazz.getName() + ": 缺少可访问的无参构造器", e);
+                }
             }
         }
+    }
+
+    private void registerBean(Class<?> clazz, Object instance) {
+        Service service = clazz.getAnnotation(Service.class);
+        String name = service.value().isEmpty()
+                ? decapitalize(clazz.getSimpleName())
+                : service.value();
+        beansByName.put(name, instance);
+        beansByType.put(clazz, instance);
+    }
+
+    /**
+     * 找可注入的构造器: @Autowired标注的 > 唯一构造器 > 无参
+     */
+    private Constructor<?> findInjectableConstructor(Class<?> clazz) {
+        Constructor<?>[] ctors = clazz.getDeclaredConstructors();
+        for (Constructor<?> c : ctors) {
+            if (c.isAnnotationPresent(Autowired.class)) {
+                return c;
+            }
+        }
+        if (ctors.length == 1 && ctors[0].getParameterCount() > 0) {
+            return ctors[0];
+        }
+        return null;
+    }
+
+    private Object[] resolveConstructorArgs(Constructor<?> ctor, Class<?> clazz) {
+        Class<?>[] paramTypes = ctor.getParameterTypes();
+        Object[] args = new Object[paramTypes.length];
+        for (int i = 0; i < paramTypes.length; i++) {
+            Object dep = findBeanByType(paramTypes[i], clazz);
+            if (dep == null) {
+                throw new DIException("构造器参数类型为 " + paramTypes[i].getName()
+                        + " 的Bean未找到, 依赖注入失败: " + clazz.getName());
+            }
+            args[i] = dep;
+        }
+        return args;
+    }
+
+    private Object findBeanByType(Class<?> type, Class<?> requester) {
+        Object bean = beansByType.get(type);
+        if (bean != null) return bean;
+        for (Map.Entry<Class<?>, Object> entry : beansByType.entrySet()) {
+            if (!entry.getKey().equals(requester) && type.isAssignableFrom(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 为实例化阶段做Class级别的拓扑排序，确保被依赖的类先实例化
+     */
+    private List<Class<?>> topologicalSortClasses() {
+        Map<Class<?>, Integer> inDegree = new LinkedHashMap<>();
+        Map<Class<?>, List<Class<?>>> dependents = new LinkedHashMap<>();
+
+        for (Class<?> clazz : serviceClasses) {
+            inDegree.put(clazz, 0);
+            dependents.put(clazz, new ArrayList<Class<?>>());
+        }
+
+        for (Class<?> clazz : serviceClasses) {
+            List<Class<?>> deps = gatherClassDependencies(clazz);
+            for (Class<?> dep : deps) {
+                if (inDegree.containsKey(dep) && !dep.equals(clazz)) {
+                    inDegree.put(clazz, inDegree.get(clazz) + 1);
+                    dependents.get(dep).add(clazz);
+                }
+            }
+        }
+
+        List<Class<?>> sorted = new ArrayList<>();
+        Queue<Class<?>> queue = new LinkedList<>();
+        for (Map.Entry<Class<?>, Integer> entry : inDegree.entrySet()) {
+            if (entry.getValue() == 0) {
+                queue.add(entry.getKey());
+            }
+        }
+
+        while (!queue.isEmpty()) {
+            Class<?> clazz = queue.poll();
+            sorted.add(clazz);
+            for (Class<?> dep : dependents.get(clazz)) {
+                int degree = inDegree.get(dep) - 1;
+                inDegree.put(dep, degree);
+                if (degree == 0) {
+                    queue.add(dep);
+                }
+            }
+        }
+
+        if (sorted.size() != serviceClasses.size()) {
+            throw new DIException("检测到循环依赖，无法实例化Bean");
+        }
+
+        return sorted;
+    }
+
+    /**
+     * 收集一个类的所有依赖类型（来自@Autowired字段和@Autowired构造器参数）
+     */
+    private List<Class<?>> gatherClassDependencies(Class<?> clazz) {
+        List<Class<?>> deps = new ArrayList<>();
+        // 字段
+        Class<?> current = clazz;
+        while (current != Object.class) {
+            for (Field field : current.getDeclaredFields()) {
+                if (field.isAnnotationPresent(Autowired.class)) {
+                    deps.add(field.getType());
+                }
+            }
+            current = current.getSuperclass();
+        }
+        // 构造器
+        Constructor<?> ctor = findInjectableConstructor(clazz);
+        if (ctor != null) {
+            Collections.addAll(deps, ctor.getParameterTypes());
+        }
+        return deps;
     }
 
     private void injectBeans() {
@@ -186,6 +326,9 @@ public class ApplicationContext {
         while (clazz != Object.class) {
             for (Field field : clazz.getDeclaredFields()) {
                 if (field.isAnnotationPresent(Autowired.class)) {
+                    if (Modifier.isFinal(field.getModifiers())) {
+                        continue;
+                    }
                     Autowired autowired = field.getAnnotation(Autowired.class);
                     Class<?> fieldType = field.getType();
                     Object dependency = findBean(fieldType, beanClass);
@@ -350,7 +493,9 @@ public class ApplicationContext {
                 String name = entry.getName();
                 if (name.endsWith(".class") && name.startsWith(path)) {
                     String className = name.substring(0, name.length() - 6).replace('/', '.');
-                    addServiceClass(className);
+                    try (InputStream in = jarFile.getInputStream(entry)) {
+                        addServiceClassAsm(className, in);
+                    }
                 }
             }
         }
@@ -367,28 +512,54 @@ public class ApplicationContext {
             } else if (file.getName().endsWith(".class")) {
                 String className = basePackage + "."
                         + file.getName().substring(0, file.getName().length() - 6);
-                addServiceClass(className);
+                try (InputStream in = Files.newInputStream(file.toPath())) {
+                    addServiceClassAsm(className, in);
+                } catch (Exception ignored) {
+                }
             }
         }
     }
 
-    private void addServiceClass(String className) {
+    private void addServiceClassAsm(String className, InputStream in) {
         try {
-            Class<?> clazz = Class.forName(className, false,
-                    Thread.currentThread().getContextClassLoader());
-            if (clazz.isAnnotationPresent(Service.class)) {
-                if (clazz.isInterface() || Modifier.isAbstract(clazz.getModifiers())) {
-                    throw new DIException(
-                            "@Service 不能标注在接口或抽象类上: " + clazz.getName()
-                    );
-                }
-                if (!serviceClasses.contains(clazz)) {
-                    serviceClasses.add(clazz);
+            ClassReader reader = new ClassReader(in);
+            ServiceDetector detector = new ServiceDetector();
+            reader.accept(detector, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+            if (detector.hasServiceAnnotation) {
+                try {
+                    Class<?> clazz = Class.forName(className, false,
+                            Thread.currentThread().getContextClassLoader());
+                    if (clazz.isInterface() || Modifier.isAbstract(clazz.getModifiers())) {
+                        throw new DIException(
+                                "@Service 不能标注在接口或抽象类上: " + clazz.getName()
+                        );
+                    }
+                    if (!serviceClasses.contains(clazz)) {
+                        serviceClasses.add(clazz);
+                    }
+                } catch (ClassNotFoundException | NoClassDefFoundError ignored) {
                 }
             }
-        } catch (DIException e) {
-            throw e;
-        } catch (ClassNotFoundException | NoClassDefFoundError ignored) {
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 检测类上是否存在@Service注解
+     */
+    private static class ServiceDetector extends ClassVisitor {
+        boolean hasServiceAnnotation = false;
+
+        ServiceDetector() {
+            super(Opcodes.ASM9);
+        }
+
+        @Override
+        public AnnotationVisitor visitAnnotation(String desc, boolean visible) {
+            if ("Lcom/skilfully/etheros/utils/di/annotations/Service;".equals(desc)) {
+                hasServiceAnnotation = true;
+            }
+            return null;
         }
     }
 
