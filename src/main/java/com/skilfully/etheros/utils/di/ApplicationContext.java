@@ -3,10 +3,13 @@ package com.skilfully.etheros.utils.di;
 import com.skilfully.etheros.utils.di.annotations.Autowired;
 import com.skilfully.etheros.utils.di.annotations.PostConstruct;
 import com.skilfully.etheros.utils.di.annotations.Service;
+import com.skilfully.etheros.utils.di.annotations.Value;
 import com.skilfully.etheros.utils.di.exception.DIException;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -14,12 +17,12 @@ import java.lang.reflect.Modifier;
 import java.net.URL;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Queue;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -76,6 +79,7 @@ public class ApplicationContext {
     }
 
     private ClassLoader classLoader;
+    private Properties applicationProperties = new Properties();
     private final List<Class<?>> serviceClasses = new ArrayList<>();
     private final Map<String, Object> beansByName = new LinkedHashMap<>();
     private final Map<Class<?>, Object> beansByType = new LinkedHashMap<>();
@@ -139,6 +143,7 @@ public class ApplicationContext {
             throw new DIException("ApplicationContext 已经 refresh 过了");
         }
         refreshed = true;
+        loadApplicationProperties();
         instantiateBeans();
         injectBeans();
         invokePostConstruct();
@@ -224,8 +229,32 @@ public class ApplicationContext {
 
     private Object[] resolveConstructorArgs(Constructor<?> ctor, Class<?> clazz) {
         Class<?>[] paramTypes = ctor.getParameterTypes();
+        Annotation[][] paramAnnotations = ctor.getParameterAnnotations();
         Object[] args = new Object[paramTypes.length];
         for (int i = 0; i < paramTypes.length; i++) {
+            Value valueAnno = findAnnotation(paramAnnotations[i], Value.class);
+            if (valueAnno != null) {
+                String key = valueAnno.value();
+                String defaultValue = valueAnno.defaultValue();
+                String raw = applicationProperties.getProperty(key, defaultValue);
+                if (raw == null || raw.isEmpty()) {
+                    throw new DIException("@Value 配置项 '" + key + "' 未找到或为空, 构造器: " + clazz.getName());
+                }
+                args[i] = convertType(raw, paramTypes[i], clazz, key);
+                continue;
+            }
+            Autowired autowired = findAnnotation(paramAnnotations[i], Autowired.class);
+            if (autowired != null && !autowired.name().isEmpty()) {
+                Object bean = beansByName.get(autowired.name());
+                if (bean == null && autowired.required()) {
+                    throw new DIException("按名称'" + autowired.name() + "'未找到Bean, 构造器: " + clazz.getName());
+                }
+                if (bean != null && !paramTypes[i].isAssignableFrom(bean.getClass())) {
+                    throw new DIException("Bean名称'" + autowired.name() + "'类型不匹配, 期望: " + paramTypes[i].getName() + ", 实际: " + bean.getClass().getName());
+                }
+                args[i] = bean;
+                continue;
+            }
             Object dep = findBeanByType(paramTypes[i], clazz);
             if (dep == null) {
                 throw new DIException("构造器参数类型为 " + paramTypes[i].getName()
@@ -234,6 +263,16 @@ public class ApplicationContext {
             args[i] = dep;
         }
         return args;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <A extends Annotation> A findAnnotation(Annotation[] annotations, Class<A> type) {
+        for (Annotation a : annotations) {
+            if (type.isInstance(a)) {
+                return (A) a;
+            }
+        }
+        return null;
     }
 
     private Object findBeanByType(Class<?> type, Class<?> requester) {
@@ -314,7 +353,13 @@ public class ApplicationContext {
         // 构造器
         Constructor<?> ctor = findInjectableConstructor(clazz);
         if (ctor != null) {
-            Collections.addAll(deps, ctor.getParameterTypes());
+            Class<?>[] paramTypes = ctor.getParameterTypes();
+            Annotation[][] paramAnnotations = ctor.getParameterAnnotations();
+            for (int i = 0; i < paramTypes.length; i++) {
+                if (findAnnotation(paramAnnotations[i], Value.class) == null) {
+                    deps.add(paramTypes[i]);
+                }
+            }
         }
         return deps;
     }
@@ -329,13 +374,41 @@ public class ApplicationContext {
         Class<?> clazz = beanClass;
         while (clazz != Object.class) {
             for (Field field : clazz.getDeclaredFields()) {
+                Value valueAnno = field.getAnnotation(Value.class);
+                if (valueAnno != null) {
+                    if (Modifier.isFinal(field.getModifiers())) {
+                        continue;
+                    }
+                    field.setAccessible(true);
+                    try {
+                        String key = valueAnno.value();
+                        String defaultValue = valueAnno.defaultValue();
+                        String raw = applicationProperties.getProperty(key, defaultValue);
+                        if (raw == null || raw.isEmpty() && defaultValue.isEmpty()) {
+                            continue;
+                        }
+                        field.set(bean, convertType(raw, field.getType(), beanClass, key));
+                    } catch (IllegalAccessException e) {
+                        throw new DIException("无法注入@Value字段 " + beanClass.getName() + "." + field.getName(), e);
+                    }
+                    continue;
+                }
                 if (field.isAnnotationPresent(Autowired.class)) {
                     if (Modifier.isFinal(field.getModifiers())) {
                         continue;
                     }
                     Autowired autowired = field.getAnnotation(Autowired.class);
                     Class<?> fieldType = field.getType();
-                    Object dependency = findBean(fieldType, beanClass);
+                    Object dependency;
+                    if (!autowired.name().isEmpty()) {
+                        dependency = beansByName.get(autowired.name());
+                        if (dependency == null && autowired.required()) {
+                            throw new DIException("按名称'" + autowired.name() + "'未找到Bean, 字段: "
+                                    + beanClass.getName() + "." + field.getName());
+                        }
+                    } else {
+                        dependency = findBean(fieldType, beanClass);
+                    }
                     if (dependency == null) {
                         if (autowired.required()) {
                             throw new DIException(
@@ -564,6 +637,38 @@ public class ApplicationContext {
             }
             return null;
         }
+    }
+
+    private void loadApplicationProperties() {
+        try (InputStream in = classLoader.getResourceAsStream("application.properties")) {
+            if (in != null) {
+                applicationProperties.load(in);
+            }
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static Object convertType(String value, Class<?> targetType, Class<?> beanClass, String key) {
+        if (targetType == String.class) {
+            return value;
+        }
+        if (targetType == int.class || targetType == Integer.class) {
+            return Integer.parseInt(value);
+        }
+        if (targetType == long.class || targetType == Long.class) {
+            return Long.parseLong(value);
+        }
+        if (targetType == boolean.class || targetType == Boolean.class) {
+            return Boolean.parseBoolean(value);
+        }
+        if (targetType == double.class || targetType == Double.class) {
+            return Double.parseDouble(value);
+        }
+        if (targetType == float.class || targetType == Float.class) {
+            return Float.parseFloat(value);
+        }
+        throw new DIException("@Value 不支持的类型 " + targetType.getName()
+                + " (配置项='" + key + "'), Bean: " + beanClass.getName());
     }
 
     private static String decapitalize(String str) {
