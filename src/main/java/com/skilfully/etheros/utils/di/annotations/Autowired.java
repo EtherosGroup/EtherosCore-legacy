@@ -12,10 +12,15 @@ import java.lang.annotation.Target;
  * @since 1.0.0
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.CONSTRUCTOR})
+@Target({ElementType.FIELD, ElementType.CONSTRUCTOR, ElementType.PARAMETER})
 public @interface Autowired {
     /**
      * 是否必须注入，默认true。若为false且未找到Bean则跳过不抛异常
      */
     boolean required() default true;
+
+    /**
+     * Bean名称，非空时按名称查找Bean
+     */
+    String name() default "";
 }
