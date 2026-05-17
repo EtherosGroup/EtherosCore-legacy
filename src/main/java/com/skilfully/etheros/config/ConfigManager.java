@@ -4,8 +4,9 @@ import com.skilfully.etheros.EtherosCore;
 import com.skilfully.etheros.config.entity.PluginConfig;
 import com.skilfully.etheros.data.GlobalData;
 import com.skilfully.etheros.exceptions.NoLanguageException;
-import com.skilfully.etheros.service.ECMessenger;
 import com.skilfully.etheros.utils.config.YamlConfig;
+import com.skilfully.etheros.utils.di.annotations.Autowired;
+import com.skilfully.etheros.utils.di.annotations.Service;
 import com.skilfully.etheros.utils.messenger.Messenger;
 
 import java.io.File;
@@ -14,15 +15,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Service
 public class ConfigManager {
 
     public static YamlConfig config;
     public static YamlConfig plugin_language_config;
     public static Map<String, YamlConfig> languages_config = new HashMap<>();
 
-    private static final Messenger messenger = ECMessenger.getMessenger();
+    @Autowired
+    private Messenger messenger;
 
-    public static void loadConfig() throws IOException, NoLanguageException {
+    public void loadConfig() throws IOException, NoLanguageException {
         File workDirectory = YamlConfig.createWorkDirectory(GlobalData.pluginName);
         if (workDirectory == null) {
             throw new RuntimeException("创建工作目录失败");
@@ -82,10 +85,10 @@ public class ConfigManager {
             plugin_language_config = new YamlConfig(languageFile);
         }
         messenger.consoleInfo(plugin_language_config.getString("plugin_language_loaded", null));
-        ECMessenger.getMessenger().setPrefix(plugin_language_config.getString("prefix", null));
+        messenger.setPrefix(plugin_language_config.getString("prefix", null));
     }
 
-    public static PluginConfig getPluginConfig() {
+    public PluginConfig getPluginConfig() {
         PluginConfig pluginConfig = new PluginConfig();
         // server
         PluginConfig.Server server = new PluginConfig.Server();

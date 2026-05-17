@@ -1,5 +1,6 @@
 package com.skilfully.etheros.utils.messenger;
 
+import com.skilfully.etheros.utils.di.annotations.Service;
 import lombok.*;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -9,26 +10,26 @@ import org.bukkit.entity.Player;
 /**
  * 消息发送器
  * @since 1.0.0
- * @version 1.0.0
+ * @version 1.0.1
  * @author Etheros Group
  */
+@Service
 public class Messenger {
 
-    public Messenger(@NonNull String pluginName) {
-        this.consolePrefix = "&7| &b" + pluginName + " &7|";
-    }
 
     @Setter
-    @Getter
     private String prefix;
 
-    @Getter
-    private final String consolePrefix;
+    private String pluginName = "&7| &bEtherosPlugin &7|";
 
     private final static String logInfo = "&7| &fINFO  &7| &r";
     private final static String logWarn = "&7| &eWARN  &7| &e";
     private final static String logError = "&7| &cERROR &7| &c";
     private final static String logDebug = "&7| &5DEBUG &7| &5";
+
+    public void setPluginName(String pluginName) {
+        this.pluginName = "&7| &b" + pluginName + " &7|";
+    }
 
     public void sendMessage(@NonNull CommandSender sender, String message, Object... args) {
         sendMessage(sender, formatMessageColor(formatMessageArgs(message, args)));
@@ -43,19 +44,19 @@ public class Messenger {
     }
 
     public void consoleInfo( String message, Object... args) {
-        sendMessage(Bukkit.getConsoleSender(), consolePrefix + logInfo + message, args);
+        sendMessage(Bukkit.getConsoleSender(), pluginName + logInfo + message, args);
     }
 
     public void consoleWarn( String message, Object... args) {
-        sendMessage(Bukkit.getConsoleSender(), consolePrefix + logWarn + message, args);
+        sendMessage(Bukkit.getConsoleSender(), pluginName + logWarn + message, args);
     }
 
     public void consoleError( String message, Object... args) {
-        sendMessage(Bukkit.getConsoleSender(), consolePrefix + logError + message, args);
+        sendMessage(Bukkit.getConsoleSender(), pluginName + logError + message, args);
     }
 
     public void consoleDebug( String message, Object... args) {
-        sendMessage(Bukkit.getConsoleSender(), consolePrefix + logDebug + message, args);
+        sendMessage(Bukkit.getConsoleSender(), pluginName + logDebug + message, args);
     }
 
     public void sendMessageToPlayer(@NonNull Player player, String message) {

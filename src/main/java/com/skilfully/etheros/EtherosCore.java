@@ -1,18 +1,13 @@
 package com.skilfully.etheros;
 
+import com.skilfully.etheros.utils.di.ApplicationContext;
 import org.bukkit.plugin.java.JavaPlugin;
-
-import java.io.IOException;
 
 public final class EtherosCore extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        try {
-            Initializer.init();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        ApplicationContext.run(EtherosCore.class);
     }
 
     @Override
