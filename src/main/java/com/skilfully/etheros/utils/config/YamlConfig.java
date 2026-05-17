@@ -1,4 +1,4 @@
-package com.skilfully.ethero.utils.config;
+package com.skilfully.etheros.utils.config;
 
 import lombok.NonNull;
 import org.bukkit.configuration.file.YamlConfiguration;

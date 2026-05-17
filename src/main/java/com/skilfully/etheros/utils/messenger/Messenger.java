@@ -1,4 +1,4 @@
-package com.skilfully.ethero.utils.messenger;
+package com.skilfully.etheros.utils.messenger;
 
 import lombok.*;
 import org.bukkit.Bukkit;
@@ -6,6 +6,12 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+/**
+ * 消息发送器
+ * @since 1.0.0
+ * @version 1.0.0
+ * @author Etheros Group
+ */
 public class Messenger {
 
     public Messenger(@NonNull String pluginName) {

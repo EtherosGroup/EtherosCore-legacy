@@ -1,12 +1,12 @@
-package com.skilfully.ethero.config;
+package com.skilfully.etheros.config;
 
-import com.skilfully.ethero.EtherosCore;
-import com.skilfully.ethero.config.entity.PluginConfig;
-import com.skilfully.ethero.data.GlobalData;
-import com.skilfully.ethero.exceptions.NoLanguageException;
-import com.skilfully.ethero.service.ECMessenger;
-import com.skilfully.ethero.utils.config.YamlConfig;
-import com.skilfully.ethero.utils.messenger.Messenger;
+import com.skilfully.etheros.EtherosCore;
+import com.skilfully.etheros.config.entity.PluginConfig;
+import com.skilfully.etheros.data.GlobalData;
+import com.skilfully.etheros.exceptions.NoLanguageException;
+import com.skilfully.etheros.service.ECMessenger;
+import com.skilfully.etheros.utils.config.YamlConfig;
+import com.skilfully.etheros.utils.messenger.Messenger;
 
 import java.io.File;
 import java.io.IOException;

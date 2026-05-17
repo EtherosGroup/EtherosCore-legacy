@@ -1,4 +1,4 @@
-package com.skilfully.ethero;
+package com.skilfully.etheros;
 
 import org.bukkit.plugin.java.JavaPlugin;
 

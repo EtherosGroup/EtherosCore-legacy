@@ -1,4 +1,4 @@
-package com.skilfully.ethero.data;
+package com.skilfully.etheros.data;
 
 public class GlobalData {
 

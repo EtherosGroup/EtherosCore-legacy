@@ -1,7 +1,7 @@
-package com.skilfully.ethero;
+package com.skilfully.etheros;
 
-import com.skilfully.ethero.exceptions.NoLanguageException;
-import com.skilfully.ethero.config.ConfigManager;
+import com.skilfully.etheros.exceptions.NoLanguageException;
+import com.skilfully.etheros.config.ConfigManager;
 
 import java.io.IOException;
 

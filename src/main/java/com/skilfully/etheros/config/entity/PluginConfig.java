@@ -1,4 +1,4 @@
-package com.skilfully.ethero.config.entity;
+package com.skilfully.etheros.config.entity;
 
 import lombok.Data;
 import java.util.List;

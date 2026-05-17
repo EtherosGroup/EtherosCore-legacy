@@ -1,7 +1,7 @@
-package com.skilfully.ethero.service;
+package com.skilfully.etheros.service;
 
-import com.skilfully.ethero.data.GlobalData;
-import com.skilfully.ethero.utils.messenger.Messenger;
+import com.skilfully.etheros.data.GlobalData;
+import com.skilfully.etheros.utils.messenger.Messenger;
 import lombok.Getter;
 
 public class ECMessenger {
