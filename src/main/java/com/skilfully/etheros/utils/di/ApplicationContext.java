@@ -6,7 +6,6 @@ import com.skilfully.etheros.utils.di.annotations.Service;
 import com.skilfully.etheros.utils.di.exception.DIException;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -65,6 +64,8 @@ public class ApplicationContext {
      */
     public static ApplicationContext run(Class<?> primarySource) {
         ApplicationContext context = new ApplicationContext();
+        ClassLoader cl = primarySource.getClassLoader();
+        context.classLoader = (cl != null) ? cl : Thread.currentThread().getContextClassLoader();
         String packageName = primarySource.getPackage().getName();
         context.scan(packageName);
         if (primarySource.isAnnotationPresent(Service.class)) {
@@ -74,6 +75,7 @@ public class ApplicationContext {
         return context;
     }
 
+    private ClassLoader classLoader;
     private final List<Class<?>> serviceClasses = new ArrayList<>();
     private final Map<String, Object> beansByName = new LinkedHashMap<>();
     private final Map<Class<?>, Object> beansByType = new LinkedHashMap<>();
@@ -86,10 +88,12 @@ public class ApplicationContext {
      * @return this (流式API)
      */
     public ApplicationContext scan(String basePackage) {
+        if (classLoader == null) {
+            classLoader = Thread.currentThread().getContextClassLoader();
+        }
         try {
-            ClassLoader cl = Thread.currentThread().getContextClassLoader();
-            String path = basePackage.replace('.', '/');
-            Enumeration<URL> resources = cl.getResources(path);
+            String path = basePackage.replace('.', '/') + "/";
+            Enumeration<URL> resources = classLoader.getResources(path);
             while (resources.hasMoreElements()) {
                 URL resource = resources.nextElement();
                 String protocol = resource.getProtocol();
@@ -252,7 +256,7 @@ public class ApplicationContext {
 
         for (Class<?> clazz : serviceClasses) {
             inDegree.put(clazz, 0);
-            dependents.put(clazz, new ArrayList<Class<?>>());
+            dependents.put(clazz, new ArrayList<>());
         }
 
         for (Class<?> clazz : serviceClasses) {
@@ -527,8 +531,7 @@ public class ApplicationContext {
             reader.accept(detector, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
             if (detector.hasServiceAnnotation) {
                 try {
-                    Class<?> clazz = Class.forName(className, false,
-                            Thread.currentThread().getContextClassLoader());
+                    Class<?> clazz = Class.forName(className, false, classLoader);
                     if (clazz.isInterface() || Modifier.isAbstract(clazz.getModifiers())) {
                         throw new DIException(
                                 "@Service 不能标注在接口或抽象类上: " + clazz.getName()
@@ -551,7 +554,7 @@ public class ApplicationContext {
         boolean hasServiceAnnotation = false;
 
         ServiceDetector() {
-            super(Opcodes.ASM9);
+            super(Opcodes.ASM5);
         }
 
         @Override
