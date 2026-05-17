@@ -1,4 +1,4 @@
-package com.skilfully.ethero.utils.config;
+package com.skilfully.etheros.utils.config;
 
 import java.io.IOException;
 import java.util.Optional;
