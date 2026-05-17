@@ -19,9 +19,18 @@ repositories {
 
 dependencies {
     compileOnly("com.destroystokyo.paper:paper-api:1.12.2-R0.1-SNAPSHOT")
+    compileOnly("net.md-5:bungeecord-chat:1.12-SNAPSHOT")
     compileOnly("org.projectlombok:lombok:1.18.36")
     annotationProcessor("org.projectlombok:lombok:1.18.36")
     implementation("org.ow2.asm:asm:9.7.1")
+}
+
+tasks.jar {
+    from({
+        configurations.runtimeClasspath.get()
+            .filter { it.name.startsWith("asm-") }
+            .map { zipTree(it) }
+    })
 }
 
 val targetJavaVersion = 8
